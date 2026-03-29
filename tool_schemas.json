@@ -1,0 +1,176 @@
+{
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Retrieve current weather conditions for a given city. Uses OpenWeatherMap (if API key set), then wttr.in (free, global), then a curated mock for 6 cities.",
+      "module": "tools.weather",
+      "function": "get_weather",
+      "parameters": {
+        "city": {
+          "type": "string",
+          "required": true,
+          "description": "Name of the destination city (e.g. 'Paris', 'Kigali')"
+        }
+      },
+      "input_example": { "city": "Kigali" },
+      "output": {
+        "on_success": {
+          "city": "string",
+          "weather": {
+            "condition": "string — e.g. 'Sunny', 'Rainy'",
+            "temperature": "integer — Celsius",
+            "humidity": "integer — percentage",
+            "wind_kph": "float — km/h",
+            "precipitation_mm": "float — mm in last hour"
+          },
+          "source": "string — 'openweathermap' | 'wttr.in' | 'mock'",
+          "status": "success"
+        },
+        "on_error": {
+          "error": "string",
+          "status": "error"
+        }
+      }
+    },
+    {
+      "name": "get_attractions",
+      "description": "Return the top 3 tourist attractions for a city. Priority: local curated database (6 cities) → OpenTripMap API (global, free key) → Claude Haiku LLM → generic placeholders.",
+      "module": "tools.attractions",
+      "function": "get_attractions",
+      "parameters": {
+        "city": {
+          "type": "string",
+          "required": true,
+          "description": "Name of the city to look up"
+        }
+      },
+      "input_example": { "city": "Tokyo" },
+      "output": {
+        "on_success": {
+          "city": "string",
+          "attractions": ["string", "string", "string"],
+          "source": "string — 'local' | 'opentripmap' | 'llm' | 'generic'",
+          "status": "success"
+        },
+        "on_error": {
+          "error": "string",
+          "status": "error"
+        }
+      }
+    },
+    {
+      "name": "convert_currency",
+      "description": "Convert a monetary amount between two currencies. Fetches live rates from open.er-api.com (no API key required); falls back to hardcoded rates if the service is unreachable.",
+      "module": "tools.currency",
+      "function": "convert_currency",
+      "parameters": {
+        "amount": {
+          "type": "number",
+          "required": true,
+          "description": "Non-negative monetary amount to convert"
+        },
+        "from_currency": {
+          "type": "string",
+          "required": true,
+          "description": "ISO 4217 source currency code (e.g. 'USD', 'EUR', 'RWF')"
+        },
+        "to_currency": {
+          "type": "string",
+          "required": false,
+          "default": "USD",
+          "description": "ISO 4217 target currency code"
+        }
+      },
+      "input_example": { "amount": 150000, "from_currency": "UGX", "to_currency": "USD" },
+      "output": {
+        "on_success": {
+          "original_amount": "number",
+          "from_currency": "string",
+          "to_currency": "string",
+          "converted_amount": "number",
+          "rate": "number — exchange rate rounded to 6 decimal places",
+          "source": "string — 'live' | 'fallback'",
+          "status": "success"
+        },
+        "on_error": {
+          "error": "string",
+          "status": "error"
+        }
+      }
+    },
+    {
+      "name": "compose_itinerary",
+      "description": "Compose a structured day-by-day itinerary from weather, attractions, and optional budget data. Rotates attractions across days and adjusts activity type based on weather.",
+      "module": "tools.itinerary",
+      "function": "compose_itinerary",
+      "parameters": {
+        "city": {
+          "type": "string",
+          "required": true,
+          "description": "Destination city name"
+        },
+        "weather": {
+          "type": "object",
+          "required": false,
+          "description": "Weather dict from get_weather (condition, temperature, etc.)"
+        },
+        "attractions": {
+          "type": "array",
+          "items": "string",
+          "required": true,
+          "description": "List of attraction names from get_attractions"
+        },
+        "budget_info": {
+          "type": "object",
+          "required": false,
+          "description": "Currency conversion result from convert_currency (optional)"
+        },
+        "num_days": {
+          "type": "integer",
+          "required": false,
+          "default": 1,
+          "description": "Number of days for the trip (minimum 1)"
+        }
+      },
+      "input_example": {
+        "city": "Paris",
+        "weather": { "condition": "Sunny", "temperature": 22 },
+        "attractions": ["Eiffel Tower", "Louvre Museum", "Seine River"],
+        "budget_info": null,
+        "num_days": 2
+      },
+      "output": {
+        "on_success": {
+          "city": "string",
+          "num_days": "integer",
+          "weather_summary": "string",
+          "outdoor_friendly": "boolean",
+          "weather_advisory": "string | omitted if no advisory",
+          "days": [
+            {
+              "day": "integer",
+              "schedule": [
+                {
+                  "time": "string",
+                  "activity": "string",
+                  "type": "string — 'indoor' | 'outdoor'",
+                  "note": "string"
+                }
+              ]
+            }
+          ],
+          "budget": {
+            "total_original": "string",
+            "total_converted": "string",
+            "per_day": "string"
+          },
+          "status": "success"
+        },
+        "on_error": {
+          "error": "string",
+          "status": "error"
+        }
+      }
+    }
+  ]
+}
