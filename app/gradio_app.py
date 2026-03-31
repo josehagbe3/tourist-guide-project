@@ -6,7 +6,9 @@ import gradio as gr
 from core.agent import plan_trip
 
 SUPPORTED_CITIES = ["Kigali", "Paris", "New York", "Nairobi", "Kampala", "London"]
-SUPPORTED_CURRENCIES = ["USD", "EUR", "RWF", "UGX", "KES", "GBP", "JPY"]
+COMMON_CURRENCIES = ["USD", "EUR", "GBP", "RWF", "UGX", "KES", "JPY",
+                     "CAD", "AUD", "CHF", "CNY", "INR", "BRL", "ZAR",
+                     "NGN", "GHS", "TZS", "ETB", "MAD", "EGP", "XOF"]
 
 CSS = """
 body { background: #0f172a !important; }
@@ -115,9 +117,13 @@ def run_agent(from_city, city, num_days, budget, from_currency, to_currency):
     if from_city and from_city.strip():
         data["from_city"] = from_city.strip()
     if budget:
+        fc = from_currency.strip().upper() if from_currency else "USD"
+        tc = to_currency.strip().upper() if to_currency else "USD"
+        if not fc:
+            return "⚠️  Please enter a budget currency (e.g. USD, EUR, XOF).", "", "", ""
         data["budget"] = budget
-        data["from_currency"] = from_currency
-        data["to_currency"] = to_currency
+        data["from_currency"] = fc
+        data["to_currency"] = tc
 
     result = plan_trip(data)
     status = result.get("status", "unknown")
@@ -129,6 +135,8 @@ def run_agent(from_city, city, num_days, budget, from_currency, to_currency):
             "", "",
             f"Missing fields: {', '.join(result['missing_fields'])}"
         )
+    if status == "budget_too_low":
+        return f"❌  {result.get('error', 'Budget too low')}", "", "", "Status: budget too low"
     if status == "error":
         return f"❌  {result.get('error', 'Unknown error')}", "", "", "Status: error"
 
@@ -229,14 +237,16 @@ with gr.Blocks(title="TouristGuide Agent") as demo:
                 label="Number of days", value=1, minimum=1, precision=0
             )
 
-            gr.HTML('<div class="section-title" style="color:#a78bfa; margin-top:20px;">💰 &nbsp;Budget (optional)</div>')
-            budget_input = gr.Number(label="Amount", precision=2)
+            gr.HTML('<div class="section-title" style="color:#a78bfa; margin-top:20px;">💰 &nbsp;Budget (required)</div>')
+            budget_input = gr.Number(label="Total amount (travel + accommodation + food + tourism)", precision=2)
             with gr.Row():
-                from_currency = gr.Dropdown(
-                    choices=SUPPORTED_CURRENCIES, value="USD", label="Budget currency"
+                from_currency = gr.Textbox(
+                    label="Budget currency", value="USD",
+                    placeholder="e.g. USD, EUR, XOF, NGN…"
                 )
-                to_currency = gr.Dropdown(
-                    choices=SUPPORTED_CURRENCIES, value="USD", label="Show costs in"
+                to_currency = gr.Textbox(
+                    label="Show costs in", value="USD",
+                    placeholder="e.g. USD, EUR, XOF, NGN…"
                 )
 
             submit_btn = gr.Button("✈️  Plan My Trip", variant="primary", elem_id="plan-btn", size="lg")

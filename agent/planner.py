@@ -7,8 +7,6 @@ try:
 except ImportError:
     _ANTHROPIC_AVAILABLE = False
 
-SUPPORTED_CURRENCIES = ["USD", "EUR", "RWF", "UGX", "KES", "GBP"]
-
 SYSTEM_PROMPT = """You are a travel planning assistant. Your job is to extract structured travel intent from the user's message.
 
 Return ONLY a valid JSON object with these fields:
@@ -24,7 +22,10 @@ Return ONLY a valid JSON object with these fields:
 Rules:
 - Extract city names exactly as written (capitalise first letter)
 - Budget must be a number, strip currency symbols
-- Currency codes must be 3-letter ISO codes (USD, EUR, UGX, RWF, KES, GBP)
+- Currency codes must be standard 3-letter ISO 4217 codes — accept ANY valid world currency
+  (e.g. USD, EUR, GBP, JPY, NGN, XOF, XAF, RWF, UGX, KES, BRL, INR, AED, ZAR, MAD, GHS …)
+- Infer the currency from context when possible (e.g. "francs" → XOF or XAF, "naira" → NGN,
+  "rupees" → INR, "pounds" → GBP, "shillings" → KES or UGX depending on city)
 - If the user says "show costs in X" or "convert to X", set to_currency to X
 - If no currency is mentioned for from_currency, leave it null
 - num_days: 1 for "day trip" or "one-day", etc.
@@ -44,13 +45,20 @@ def _extract_intent_with_llm(user_message: str) -> dict:
     return json.loads(raw)
 
 
+def _normalize_currency(code) -> str | None:
+    """Uppercase and strip whitespace from any currency code."""
+    if not code:
+        return None
+    return str(code).strip().upper()
+
+
 def _extract_intent_rule_based(data: dict) -> dict:
     """Fallback rule-based extraction when LLM is unavailable."""
     return {
         "city": data.get("city"),
         "budget": data.get("budget"),
-        "from_currency": data.get("from_currency") or data.get("currency"),
-        "to_currency": data.get("to_currency"),
+        "from_currency": _normalize_currency(data.get("from_currency") or data.get("currency")),
+        "to_currency": _normalize_currency(data.get("to_currency")),
         "num_days": data.get("num_days", 1),
         "date": data.get("date")
     }
@@ -86,14 +94,18 @@ def create_plan(data: dict) -> dict:
     missing = []
     if not city:
         missing.append("city")
+    if budget is None:
+        missing.append("budget")
     if budget is not None and not from_currency:
         missing.append("from_currency")
+    if budget is None and from_currency:
+        missing.append("budget")
 
     if missing:
         field_hints = {
             "city": "Which city would you like to visit?",
             "from_currency": "What currency is your budget in?",
-            "budget": "What is your budget for the trip?",
+            "budget": "What is your total budget for the trip (covering travel, accommodation, food and tourism)?",
             "num_days": "How many days is your trip?"
         }
         questions = " ".join(field_hints[f] for f in missing if f in field_hints)
@@ -107,11 +119,8 @@ def create_plan(data: dict) -> dict:
     # Validate num_days
     num_days = max(1, int(intent.get("num_days") or data.get("num_days") or 1))
 
-    # Decide which tools to call
-    steps = ["weather", "attractions"]
-    if budget is not None and from_currency:
-        steps.append("currency")
-    steps.append("itinerary")
+    # Budget and currency always required now
+    steps = ["weather", "attractions", "currency", "itinerary"]
 
     return {
         "status": "success",

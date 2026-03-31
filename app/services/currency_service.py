@@ -53,10 +53,14 @@ class CurrencyService:
         return result
 
     def _fallback_rate(self, from_currency: str, to_currency: str):
-        """Returns (rate, source) or (None, error_message)."""
-        if from_currency not in self.FALLBACK_RATES:
-            return None, f"Unsupported currency: {from_currency}"
-        if to_currency not in self.FALLBACK_RATES:
-            return None, f"Unsupported currency: {to_currency}"
+        """Returns (rate, source) or (None, error_message).
+        Falls back to offline table for known currencies; for unknown ones
+        instructs the user to set EXCHANGERATE_API_KEY.
+        """
+        if from_currency not in self.FALLBACK_RATES or to_currency not in self.FALLBACK_RATES:
+            return None, (
+                f"Currency pair {from_currency}/{to_currency} requires a live API. "
+                "Set EXCHANGERATE_API_KEY for full global currency support."
+            )
         rate = self.FALLBACK_RATES[to_currency] / self.FALLBACK_RATES[from_currency]
         return rate, "fallback"

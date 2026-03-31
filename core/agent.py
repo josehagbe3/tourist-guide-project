@@ -25,6 +25,10 @@ def plan_trip(data: dict):
     # Step 2: Execute
     results = execute_plan(plan, data)
 
+    # Budget too low — return immediately with clear message
+    if isinstance(results, dict) and results.get("status") == "budget_too_low":
+        return results
+
     # Step 3: Validate — on full failure, still build a graceful response
     validated = validate_results(results)
     if validated.get("status") == "error":
