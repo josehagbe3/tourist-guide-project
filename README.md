@@ -63,9 +63,9 @@ User input (structured dict or natural language string)
 | Currency | `convert_currency(amount, from, to)` | amount + currency codes | converted amount + rate |
 | Itinerary | `compose_itinerary(city, weather, attractions, budget)` | tool outputs | time-based schedule |
 
-**Weather tool** — priority cascade: (1) OpenWeatherMap API when `OPENWEATHER_API_KEY` is set; (2) wttr.in free API (no key, global coverage); (3) curated mock data for 6 cities (Kigali, Paris, New York, Nairobi, Kampala, London). Returns `condition`, `temperature`, `humidity`, `wind_kph`, and `precipitation_mm`. The `source` field (`openweathermap` / `wttr.in` / `mock`) is always declared in the response.
+**Weather tool** — priority cascade: (1) OpenWeatherMap API when `OPENWEATHER_API_KEY` is set; (2) wttr.in free API (no key, global coverage). Returns `condition`, `temperature`, `humidity`, `wind_kph`, `feels_like`, and `precipitation_mm`. The `source` field (`openweathermap` / `wttr.in`) is always declared in the response.
 
-**Currency tool** — fetches live exchange rates from open.er-api.com (free, no API key required) with support for any ISO 4217 currency pair. Falls back to a hardcoded rate table (USD, EUR, GBP, RWF, UGX, KES, JPY) only if the live API is unreachable. The `source` field (`live` / `fallback`) is declared in every response.
+**Currency tool** — fetches live exchange rates from ExchangeRate-API when `EXCHANGERATE_API_KEY` is set. Falls back to a hardcoded offline table (USD, EUR, GBP, RWF, UGX, KES, JPY) if the key is missing or the API is unreachable. The `source` field (`exchangerate-api` / `fallback`) is declared in every response.
 
 **Itinerary tool** — deterministic scheduler. Reads weather condition and marks the plan as outdoor-friendly or not. Produces a 5-slot day schedule. Adds a weather advisory if conditions are poor or temperature is extreme.
 
@@ -86,7 +86,7 @@ The executor runs tools in order. Each failure is recorded in an `errors` list b
 | Unsupported city (weather/attractions) | Tool returns `status: error`; other tools still run |
 | Invalid currency code | Currency tool returns `status: error`; itinerary built without budget info |
 | All tools fail | Validator flags it; responder returns a graceful "no data" message |
-| API timeout / network error | Weather falls back to mock data automatically |
+| API timeout / network error | Weather falls back to wttr.in; attractions fall back to OpenStreetMap Overpass |
 
 ---
 
@@ -98,7 +98,7 @@ The executor runs tools in order. Each failure is recorded in an `errors` list b
 | API key exposure | Key loaded from environment variable via `python-dotenv`; never hardcoded |
 | Hallucinated attractions or weather | Responder only uses `tool_outputs` dict — never the raw user string |
 | Malformed tool output trusted blindly | Validator checks `status` field before passing data to responder |
-| Stale mock data misleading users | Source field (`live` vs `mock`) is explicit in every weather response |
+| Stale data misleading users | `source` field is explicit in every tool response (`openweathermap` / `wttr.in`, `exchangerate-api` / `fallback`, etc.) |
 | Unsupported currency silently converting wrong | Currency tool validates both `from_currency` and `to_currency` before any calculation |
 | Outdoor itinerary in bad weather | Itinerary tool checks `condition` field and sets `outdoor_friendly: False` when rainy/stormy; weather advisory added |
 
@@ -122,11 +122,11 @@ The executor runs tools in order. Each failure is recorded in an `errors` list b
 **Status:** `needs_clarification`
 **Output:** "What currency is your budget in?"
 
-### Transcript 4 — Tool failure: unsupported city
-**Input:** `city=Nairobi` (no attractions data)
-**Tools called:** weather (mock success), attractions (error), itinerary (error — no attractions)
-**Status:** `partial_success`
-**Output:** Weather retrieved, graceful note that attractions are unavailable
+### Transcript 4 — Tool failure: unknown city (no API key)
+**Input:** `city=Accra` (not in local DB, no OPENTRIPMAP_API_KEY set)
+**Tools called:** weather (wttr.in success), attractions (OpenStreetMap Overpass fallback), itinerary (success)
+**Status:** `success`
+**Output:** Live weather, real attractions from OpenStreetMap, full itinerary
 
 ### Transcript 5 — Tool failure: invalid currency
 **Input:** `city=Paris, budget=100, from_currency=XYZ, to_currency=USD`
@@ -141,29 +141,63 @@ The executor runs tools in order. Each failure is recorded in an `errors` list b
 **Output:** Rainy 22°C day → itinerary marked `outdoor_friendly: False`, weather advisory added
 
 ### System limitations
-- Attractions database covers 3 cities only (Kigali, Paris, New York). Any other city returns a tool error.
-- Mock weather covers 6 cities; live API covers any city with a valid OpenWeatherMap key.
-- Currency table is static — does not reflect real-time fluctuations.
-- Itinerary schedule is fixed at 5 slots; does not yet adapt to `num_days > 1`.
+- Attractions for cities outside the local database (10 cities) require `OPENTRIPMAP_API_KEY`; free fallback via OpenStreetMap Overpass is used otherwise.
+- Currency conversion is live via ExchangeRate-API when `EXCHANGERATE_API_KEY` is set; falls back to a 7-currency offline table.
+- Weather is live via OpenWeatherMap when `OPENWEATHER_API_KEY` is set; falls back to wttr.in (free, global).
+- Itinerary detail shown for up to 3 days; longer trips summarise remaining days.
 
 ---
 
-## 5. Setup
+## 5. Setup & Running
+
+### Requirements
+
+- Python 3.10 or higher
+- Internet connection (for live weather, attractions, and currency APIs)
+
+### Step-by-step (Linux / macOS)
 
 ```bash
-# Install dependencies
+# 1. Get the project
+git clone <repo-url>
+cd TouristGuide_Agent
+
+# 2. Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables (optional — mock fallbacks exist)
-export OPENWEATHER_API_KEY=your_key_here
-export ANTHROPIC_API_KEY=your_key_here   # enables LLM planner + responder
+# 4. Configure API keys (optional — free fallbacks work without keys)
+cp .env.example .env
+# Edit .env and fill in any keys you have:
+#   OPENWEATHER_API_KEY   → openweathermap.org/api       (free tier)
+#   OPENTRIPMAP_API_KEY   → opentripmap.com/product      (free tier)
+#   EXCHANGERATE_API_KEY  → exchangerate-api.com          (free tier)
+#   ANTHROPIC_API_KEY     → console.anthropic.com         (enables AI responses)
 
-# Run Gradio UI
+# 5. Run the Gradio UI
 python app/gradio_app.py
-
-# Or run FastAPI
-uvicorn app.main:app --reload
 ```
+Open **http://127.0.0.1:7860** in your browser.
+
+### Windows
+
+```bat
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+python app/gradio_app.py
+```
+
+### Running the REST API (optional)
+
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+Open **http://127.0.0.1:8000/docs** for the interactive Swagger UI.
 
 ### API example
 ```bash
@@ -171,3 +205,15 @@ curl -X POST http://localhost:8000/plan-trip \
   -H "Content-Type: application/json" \
   -d '{"city": "Kigali", "budget": 150000, "from_currency": "UGX", "to_currency": "USD"}'
 ```
+
+### What works without any API keys
+
+| Feature | Without keys | With keys |
+|---------|-------------|-----------|
+| Weather | wttr.in (free, global) | OpenWeatherMap (more accurate) |
+| Attractions | OpenStreetMap Overpass (free) | OpenTripMap (richer data) |
+| Currency | Offline 7-currency table | ExchangeRate-API (live, all currencies) |
+| AI responses | Structured fallback | Claude Haiku (natural language) |
+
+
+

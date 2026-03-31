@@ -1,7 +1,17 @@
-fastapi==0.110.0
-uvicorn==0.29.0
-pydantic==2.6.4
-requests==2.31.0
-python-dotenv==1.0.1
-gradio>=4.44.0
+# Web framework & API
+fastapi>=0.110.0
+uvicorn>=0.29.0
+pydantic>=2.6.4
+python-multipart>=0.0.9
+
+# HTTP requests
+requests>=2.31.0
+
+# Environment variables
+python-dotenv>=1.0.1
+
+# Gradio UI
+gradio>=6.0.0
+
+# LLM (optional — enables AI planner & responder)
 anthropic>=0.25.0
