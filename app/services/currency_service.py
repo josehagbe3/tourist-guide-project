@@ -1,8 +1,6 @@
 from tools.currency import fetch_exchangerate
 
-
 # Map country names (lowercase) → ISO 4217 currency code.
-# Covers ~150 countries; used when user enters a country instead of a code.
 COUNTRY_TO_CURRENCY = {
     # Africa
     "algeria": "DZD", "angola": "AOA", "benin": "XOF", "botswana": "BWP",
@@ -22,7 +20,6 @@ COUNTRY_TO_CURRENCY = {
     "south africa": "ZAR", "south sudan": "SSP", "sudan": "SDG",
     "tanzania": "TZS", "togo": "XOF", "tunisia": "TND",
     "uganda": "UGX", "zambia": "ZMW", "zimbabwe": "ZWL",
-
     # Americas
     "argentina": "ARS", "bahamas": "BSD", "barbados": "BBD",
     "belize": "BZD", "bolivia": "BOB", "brazil": "BRL",
@@ -32,9 +29,7 @@ COUNTRY_TO_CURRENCY = {
     "haiti": "HTG", "honduras": "HNL", "jamaica": "JMD",
     "mexico": "MXN", "nicaragua": "NIO", "panama": "PAB",
     "paraguay": "PYG", "peru": "PEN", "trinidad and tobago": "TTD",
-    "united states": "USD", "usa": "USD", "uruguay": "UYU",
-    "venezuela": "VES",
-
+    "united states": "USD", "uruguay": "UYU", "venezuela": "VES",
     # Asia
     "afghanistan": "AFN", "bangladesh": "BDT", "bhutan": "BTN",
     "brunei": "BND", "cambodia": "KHR", "china": "CNY",
@@ -45,9 +40,8 @@ COUNTRY_TO_CURRENCY = {
     "nepal": "NPR", "north korea": "KPW", "pakistan": "PKR",
     "philippines": "PHP", "singapore": "SGD", "south korea": "KRW",
     "sri lanka": "LKR", "taiwan": "TWD", "tajikistan": "TJS",
-    "thailand": "THB", "timor-leste": "USD", "turkmenistan": "TMT",
-    "uzbekistan": "UZS", "vietnam": "VND",
-
+    "thailand": "THB", "turkmenistan": "TMT", "uzbekistan": "UZS",
+    "vietnam": "VND",
     # Europe
     "albania": "ALL", "andorra": "EUR", "austria": "EUR",
     "belarus": "BYN", "belgium": "EUR", "bosnia": "BAM",
@@ -64,50 +58,30 @@ COUNTRY_TO_CURRENCY = {
     "russia": "RUB", "san marino": "EUR", "serbia": "RSD",
     "slovakia": "EUR", "slovenia": "EUR", "spain": "EUR",
     "sweden": "SEK", "switzerland": "CHF", "turkey": "TRY",
-    "ukraine": "UAH", "united kingdom": "GBP", "uk": "GBP",
-    "england": "GBP", "scotland": "GBP", "wales": "GBP",
-    "vatican": "EUR",
-
+    "ukraine": "UAH", "united kingdom": "GBP", "england": "GBP",
+    "scotland": "GBP", "wales": "GBP", "vatican": "EUR",
     # Middle East
     "bahrain": "BHD", "iran": "IRR", "iraq": "IQD",
     "israel": "ILS", "jordan": "JOD", "kuwait": "KWD",
     "lebanon": "LBP", "oman": "OMR", "palestine": "ILS",
     "qatar": "QAR", "saudi arabia": "SAR", "syria": "SYP",
-    "united arab emirates": "AED", "uae": "AED", "yemen": "YER",
-
+    "united arab emirates": "AED", "yemen": "YER",
     # Oceania
     "australia": "AUD", "fiji": "FJD", "new zealand": "NZD",
     "papua new guinea": "PGK", "samoa": "WST", "tonga": "TOP",
 }
 
 
-def resolve_currency(value: str) -> tuple[str, str | None]:
+def _resolve(value: str) -> str:
     """
-    Resolve a user input to an ISO 4217 currency code.
-    Accepts:
-      - A country name: "France" → "EUR", "Nigeria" → "NGN"  (checked first)
-      - A 3-letter ISO 4217 code: "USD", "eur", "rwf" → returned uppercased
-    Returns (code, note) where note is a human-readable clarification or None.
-    Raises ValueError if the input cannot be resolved.
+    Resolve a currency input to an ISO 4217 code.
+    Accepts a full country name ("France", "Nigeria") or a currency code ("EUR", "usd").
+    Country name is checked first (case-insensitive), then treated as a code.
     """
-    value = value.strip()
-
-    # 1. Try country name lookup first (handles abbreviations like "uae", "usa")
-    country = value.lower()
-    code = COUNTRY_TO_CURRENCY.get(country)
-    if code:
-        note = f"'{value}' is a country → using {code}" if len(value) > 4 or value.upper() != code else None
-        return code, note
-
-    # 2. Treat as currency code (2–4 uppercase letters)
-    if len(value) <= 4 and value.replace("-", "").isalpha():
-        return value.upper(), None
-
-    raise ValueError(
-        f"'{value}' is not a recognised currency code or country name. "
-        "Please enter a 3-letter ISO 4217 code (e.g. USD, EUR, NGN) "
-        "or a country name (e.g. France, Nigeria)."
-    )
+    looked_up = COUNTRY_TO_CURRENCY.get(value.strip().lower())
+    if looked_up:
+        return looked_up
+    return value.strip().upper()
 
 
 class CurrencyService:
@@ -122,15 +96,12 @@ class CurrencyService:
         "CAD": 1.36,      "NZD": 1.63,      "SEK": 10.42,
         "NOK": 10.55,     "DKK": 6.88,      "SGD": 1.34,
         "HKD": 7.82,      "CNY": 7.24,
-
         # Americas
         "MXN": 17.15,     "BRL": 4.97,      "ARS": 870.0,
         "CLP": 950.0,     "COP": 3900.0,    "PEN": 3.72,
-
         # Europe (non-euro)
         "PLN": 3.97,      "CZK": 22.8,      "HUF": 355.0,
         "RON": 4.57,      "TRY": 32.5,
-
         # Middle East / Asia
         "AED": 3.67,      "SAR": 3.75,      "QAR": 3.64,
         "KWD": 0.307,     "BHD": 0.376,     "OMR": 0.385,
@@ -138,7 +109,6 @@ class CurrencyService:
         "LKR": 305.0,     "THB": 35.1,      "MYR": 4.70,
         "IDR": 15700.0,   "PHP": 56.5,      "VND": 24500.0,
         "KRW": 1325.0,    "TWD": 31.8,
-
         # Africa
         "NGN": 1550.0,    "GHS": 15.5,      "KES": 130.0,
         "UGX": 3750.0,    "TZS": 2530.0,    "RWF": 1300.0,
@@ -155,22 +125,10 @@ class CurrencyService:
         if not from_currency:
             return {"error": "Source currency required", "status": "error"}
 
-        warnings = []
-
-        # Resolve country names → currency codes
-        try:
-            from_currency, from_note = resolve_currency(from_currency)
-            if from_note:
-                warnings.append(from_note)
-        except ValueError as e:
-            return {"error": str(e), "status": "error"}
-
-        try:
-            to_currency, to_note = resolve_currency(to_currency)
-            if to_note:
-                warnings.append(to_note)
-        except ValueError as e:
-            return {"error": str(e), "status": "error"}
+        # Resolve country names → currency codes before anything else
+        from_currency = _resolve(from_currency)
+        to_currency   = _resolve(to_currency)
+        warnings      = []
 
         # Primary: ExchangeRate-API
         try:
