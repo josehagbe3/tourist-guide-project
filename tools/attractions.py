@@ -1,5 +1,6 @@
 import os
 import requests
+from functools import lru_cache
 
 OPENTRIPMAP_GEONAME_URL = "https://api.opentripmap.com/0.1/en/places/geoname"
 OPENTRIPMAP_RADIUS_URL  = "https://api.opentripmap.com/0.1/en/places/radius"
@@ -49,55 +50,57 @@ def fetch_opentripmap(city: str) -> list[str]:
     return names[:5]
 
 
-def _geocode(city: str) -> tuple[float, float]:
+@lru_cache(maxsize=512)
+def _geocode(city: str) -> tuple[float, float, str]:
     """
-    Resolve a city name to (lat, lon) using Nominatim.
-    Tries multiple strategies to handle accented names, alternate spellings, etc.
+    Resolve a city name to (lat, lon, country_code) using Nominatim.
+    Result is cached so repeated calls for the same city are free.
+    Tries multiple strategies to handle accents, alternate spellings, etc.
     Raises ValueError if nothing is found.
     """
     headers = {"User-Agent": "TouristGuideAgent/1.0", "Accept-Language": "en"}
 
-    # Strategy 1: plain city name search
-    resp = requests.get(
-        NOMINATIM_URL,
-        params={"q": city, "format": "json", "limit": 3,
-                "featuretype": "city", "addressdetails": 0},
-        headers=headers, timeout=6,
-    )
-    resp.raise_for_status()
-    results = resp.json()
-
-    # Strategy 2: if no results, relax the featuretype filter
-    if not results:
-        resp = requests.get(
-            NOMINATIM_URL,
-            params={"q": city, "format": "json", "limit": 3, "addressdetails": 0},
-            headers=headers, timeout=6,
-        )
+    for params in [
+        {"q": city, "format": "json", "limit": 3,
+         "featuretype": "city", "addressdetails": 1},
+        {"q": city, "format": "json", "limit": 3, "addressdetails": 1},
+        {"city": city, "format": "json", "limit": 3, "addressdetails": 1},
+    ]:
+        resp = requests.get(NOMINATIM_URL, params=params, headers=headers, timeout=6)
         resp.raise_for_status()
         results = resp.json()
+        if results:
+            r = results[0]
+            country_code = r.get("address", {}).get("country_code", "").upper()
+            return float(r["lat"]), float(r["lon"]), country_code
 
-    # Strategy 3: try as a settlement (handles villages/towns spelled differently)
-    if not results:
-        resp = requests.get(
-            NOMINATIM_URL,
-            params={"city": city, "format": "json", "limit": 3, "addressdetails": 0},
-            headers=headers, timeout=6,
-        )
-        resp.raise_for_status()
-        results = resp.json()
+    raise ValueError(f"City not found via geocoding: {city}")
 
-    if not results:
-        raise ValueError(f"City not found via geocoding: {city}")
 
-    return float(results[0]["lat"]), float(results[0]["lon"])
+def _score_element(tags: dict) -> int:
+    """
+    Return a quality score for an OSM element.
+    Higher = better: prefer entries linked to Wikipedia/Wikidata
+    and tourism=attraction over generic amenity tags.
+    """
+    score = 0
+    if tags.get("wikidata"):
+        score += 3
+    if tags.get("wikipedia"):
+        score += 2
+    if tags.get("tourism") in ("attraction", "museum", "gallery", "viewpoint"):
+        score += 2
+    if tags.get("historic") in ("monument", "memorial", "castle", "ruins",
+                                 "archaeological_site"):
+        score += 1
+    return score
 
 
 def _overpass_query(lat: float, lon: float, radius: int) -> list[str]:
     """
     Query Overpass for tourism-related named places within radius metres.
     Tries each server in OVERPASS_SERVERS until one responds.
-    Uses a broad set of tags so cities with sparse tourism= tagging still return results.
+    Results are ranked by quality score (wikidata/wikipedia links first).
     """
     query = f"""
     [out:json][timeout:15];
@@ -117,14 +120,21 @@ def _overpass_query(lat: float, lon: float, radius: int) -> list[str]:
             resp = requests.post(server, data={"data": query}, timeout=15)
             resp.raise_for_status()
             elements = resp.json().get("elements", [])
+
+            # Rank by quality, deduplicate by name
+            scored = []
             seen = set()
-            names = []
             for e in elements:
-                name = e.get("tags", {}).get("name", "").strip()
-                if name and name not in seen:
-                    seen.add(name)
-                    names.append(name)
-            return names
+                tags = e.get("tags", {})
+                name = tags.get("name", "").strip()
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                scored.append((name, _score_element(tags)))
+
+            scored.sort(key=lambda x: x[1], reverse=True)
+            return [name for name, _ in scored]
+
         except Exception as e:
             last_error = e
             continue
@@ -132,17 +142,16 @@ def _overpass_query(lat: float, lon: float, radius: int) -> list[str]:
     raise ValueError(f"All Overpass servers failed: {last_error}")
 
 
+@lru_cache(maxsize=512)
 def fetch_overpass(city: str) -> list[str]:
     """
     Fetch attractions via Nominatim geocoding + Overpass query.
     Tries a 15 km radius first; expands to 30 km if too few results.
     Raises on total failure.
     """
-    lat, lon = _geocode(city)
+    lat, lon, _ = _geocode(city)
 
     names = _overpass_query(lat, lon, radius=15000)
-
-    # Expand radius if fewer than 3 results
     if len(names) < 3:
         names = _overpass_query(lat, lon, radius=30000)
 

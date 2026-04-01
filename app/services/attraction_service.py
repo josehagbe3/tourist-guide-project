@@ -149,11 +149,15 @@ class AttractionService:
         except Exception as e:
             warnings.append(f"OpenTripMap: {e}")
 
-        # 3. Fallback: OpenStreetMap Overpass
+        # 3. Fallback: OpenStreetMap Overpass (also resolves country)
         try:
+            from tools.attractions import _geocode
+            _, _, country_code = _geocode(city)
             attractions = fetch_overpass(city)
             result = {"city": city, "attractions": attractions,
                       "source": "openstreetmap", "status": "success"}
+            if country_code:
+                result["country_code"] = country_code
             if warnings:
                 result["warnings"] = warnings
             return result
