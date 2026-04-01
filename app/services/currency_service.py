@@ -1,88 +1,5 @@
 from tools.currency import fetch_exchangerate
 
-# Map country names (lowercase) → ISO 4217 currency code.
-COUNTRY_TO_CURRENCY = {
-    # Africa
-    "algeria": "DZD", "angola": "AOA", "benin": "XOF", "botswana": "BWP",
-    "burkina faso": "XOF", "burundi": "BIF", "cameroon": "XAF",
-    "cape verde": "CVE", "central african republic": "XAF", "chad": "XAF",
-    "comoros": "KMF", "congo": "XAF", "democratic republic of congo": "CDF",
-    "djibouti": "DJF", "egypt": "EGP", "equatorial guinea": "XAF",
-    "eritrea": "ERN", "ethiopia": "ETB", "gabon": "XAF", "gambia": "GMD",
-    "ghana": "GHS", "guinea": "GNF", "guinea-bissau": "XOF",
-    "ivory coast": "XOF", "cote d'ivoire": "XOF", "kenya": "KES",
-    "lesotho": "LSL", "liberia": "LRD", "libya": "LYD",
-    "madagascar": "MGA", "malawi": "MWK", "mali": "XOF",
-    "mauritania": "MRU", "mauritius": "MUR", "morocco": "MAD",
-    "mozambique": "MZN", "namibia": "NAD", "niger": "XOF",
-    "nigeria": "NGN", "rwanda": "RWF", "senegal": "XOF",
-    "seychelles": "SCR", "sierra leone": "SLL", "somalia": "SOS",
-    "south africa": "ZAR", "south sudan": "SSP", "sudan": "SDG",
-    "tanzania": "TZS", "togo": "XOF", "tunisia": "TND",
-    "uganda": "UGX", "zambia": "ZMW", "zimbabwe": "ZWL",
-    # Americas
-    "argentina": "ARS", "bahamas": "BSD", "barbados": "BBD",
-    "belize": "BZD", "bolivia": "BOB", "brazil": "BRL",
-    "canada": "CAD", "chile": "CLP", "colombia": "COP",
-    "costa rica": "CRC", "cuba": "CUP", "dominican republic": "DOP",
-    "ecuador": "USD", "el salvador": "USD", "guatemala": "GTQ",
-    "haiti": "HTG", "honduras": "HNL", "jamaica": "JMD",
-    "mexico": "MXN", "nicaragua": "NIO", "panama": "PAB",
-    "paraguay": "PYG", "peru": "PEN", "trinidad and tobago": "TTD",
-    "united states": "USD", "uruguay": "UYU", "venezuela": "VES",
-    # Asia
-    "afghanistan": "AFN", "bangladesh": "BDT", "bhutan": "BTN",
-    "brunei": "BND", "cambodia": "KHR", "china": "CNY",
-    "hong kong": "HKD", "india": "INR", "indonesia": "IDR",
-    "japan": "JPY", "kazakhstan": "KZT", "kyrgyzstan": "KGS",
-    "laos": "LAK", "macau": "MOP", "malaysia": "MYR",
-    "maldives": "MVR", "mongolia": "MNT", "myanmar": "MMK",
-    "nepal": "NPR", "north korea": "KPW", "pakistan": "PKR",
-    "philippines": "PHP", "singapore": "SGD", "south korea": "KRW",
-    "sri lanka": "LKR", "taiwan": "TWD", "tajikistan": "TJS",
-    "thailand": "THB", "turkmenistan": "TMT", "uzbekistan": "UZS",
-    "vietnam": "VND",
-    # Europe
-    "albania": "ALL", "andorra": "EUR", "austria": "EUR",
-    "belarus": "BYN", "belgium": "EUR", "bosnia": "BAM",
-    "bulgaria": "BGN", "croatia": "EUR", "cyprus": "EUR",
-    "czech republic": "CZK", "czechia": "CZK", "denmark": "DKK",
-    "estonia": "EUR", "finland": "EUR", "france": "EUR",
-    "germany": "EUR", "greece": "EUR", "hungary": "HUF",
-    "iceland": "ISK", "ireland": "EUR", "italy": "EUR",
-    "kosovo": "EUR", "latvia": "EUR", "liechtenstein": "CHF",
-    "lithuania": "EUR", "luxembourg": "EUR", "malta": "EUR",
-    "moldova": "MDL", "monaco": "EUR", "montenegro": "EUR",
-    "netherlands": "EUR", "north macedonia": "MKD", "norway": "NOK",
-    "poland": "PLN", "portugal": "EUR", "romania": "RON",
-    "russia": "RUB", "san marino": "EUR", "serbia": "RSD",
-    "slovakia": "EUR", "slovenia": "EUR", "spain": "EUR",
-    "sweden": "SEK", "switzerland": "CHF", "turkey": "TRY",
-    "ukraine": "UAH", "united kingdom": "GBP", "england": "GBP",
-    "scotland": "GBP", "wales": "GBP", "vatican": "EUR",
-    # Middle East
-    "bahrain": "BHD", "iran": "IRR", "iraq": "IQD",
-    "israel": "ILS", "jordan": "JOD", "kuwait": "KWD",
-    "lebanon": "LBP", "oman": "OMR", "palestine": "ILS",
-    "qatar": "QAR", "saudi arabia": "SAR", "syria": "SYP",
-    "united arab emirates": "AED", "yemen": "YER",
-    # Oceania
-    "australia": "AUD", "fiji": "FJD", "new zealand": "NZD",
-    "papua new guinea": "PGK", "samoa": "WST", "tonga": "TOP",
-}
-
-
-def _resolve(value: str) -> str:
-    """
-    Resolve a currency input to an ISO 4217 code.
-    Accepts a full country name ("France", "Nigeria") or a currency code ("EUR", "usd").
-    Country name is checked first (case-insensitive), then treated as a code.
-    """
-    looked_up = COUNTRY_TO_CURRENCY.get(value.strip().lower())
-    if looked_up:
-        return looked_up
-    return value.strip().upper()
-
 
 class CurrencyService:
 
@@ -125,9 +42,8 @@ class CurrencyService:
         if not from_currency:
             return {"error": "Source currency required", "status": "error"}
 
-        # Resolve country names → currency codes before anything else
-        from_currency = _resolve(from_currency)
-        to_currency   = _resolve(to_currency)
+        from_currency = from_currency.strip().upper()
+        to_currency   = to_currency.strip().upper()
         warnings      = []
 
         # Primary: ExchangeRate-API

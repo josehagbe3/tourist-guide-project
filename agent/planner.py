@@ -72,10 +72,10 @@ def _extract_intent_with_llm(user_message: str) -> dict:
 
 
 def _normalize_currency(code) -> str | None:
-    """Strip whitespace — resolution (code vs country name) happens in CurrencyService."""
+    """Uppercase and strip whitespace from any currency code."""
     if not code:
         return None
-    return str(code).strip()
+    return str(code).strip().upper()
 
 
 def _extract_intent_rule_based(data: dict) -> dict:
