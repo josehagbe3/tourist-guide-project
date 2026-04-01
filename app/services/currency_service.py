@@ -1,6 +1,115 @@
 from tools.currency import fetch_exchangerate
 
 
+# Map country names (lowercase) → ISO 4217 currency code.
+# Covers ~150 countries; used when user enters a country instead of a code.
+COUNTRY_TO_CURRENCY = {
+    # Africa
+    "algeria": "DZD", "angola": "AOA", "benin": "XOF", "botswana": "BWP",
+    "burkina faso": "XOF", "burundi": "BIF", "cameroon": "XAF",
+    "cape verde": "CVE", "central african republic": "XAF", "chad": "XAF",
+    "comoros": "KMF", "congo": "XAF", "democratic republic of congo": "CDF",
+    "djibouti": "DJF", "egypt": "EGP", "equatorial guinea": "XAF",
+    "eritrea": "ERN", "ethiopia": "ETB", "gabon": "XAF", "gambia": "GMD",
+    "ghana": "GHS", "guinea": "GNF", "guinea-bissau": "XOF",
+    "ivory coast": "XOF", "cote d'ivoire": "XOF", "kenya": "KES",
+    "lesotho": "LSL", "liberia": "LRD", "libya": "LYD",
+    "madagascar": "MGA", "malawi": "MWK", "mali": "XOF",
+    "mauritania": "MRU", "mauritius": "MUR", "morocco": "MAD",
+    "mozambique": "MZN", "namibia": "NAD", "niger": "XOF",
+    "nigeria": "NGN", "rwanda": "RWF", "senegal": "XOF",
+    "seychelles": "SCR", "sierra leone": "SLL", "somalia": "SOS",
+    "south africa": "ZAR", "south sudan": "SSP", "sudan": "SDG",
+    "tanzania": "TZS", "togo": "XOF", "tunisia": "TND",
+    "uganda": "UGX", "zambia": "ZMW", "zimbabwe": "ZWL",
+
+    # Americas
+    "argentina": "ARS", "bahamas": "BSD", "barbados": "BBD",
+    "belize": "BZD", "bolivia": "BOB", "brazil": "BRL",
+    "canada": "CAD", "chile": "CLP", "colombia": "COP",
+    "costa rica": "CRC", "cuba": "CUP", "dominican republic": "DOP",
+    "ecuador": "USD", "el salvador": "USD", "guatemala": "GTQ",
+    "haiti": "HTG", "honduras": "HNL", "jamaica": "JMD",
+    "mexico": "MXN", "nicaragua": "NIO", "panama": "PAB",
+    "paraguay": "PYG", "peru": "PEN", "trinidad and tobago": "TTD",
+    "united states": "USD", "usa": "USD", "uruguay": "UYU",
+    "venezuela": "VES",
+
+    # Asia
+    "afghanistan": "AFN", "bangladesh": "BDT", "bhutan": "BTN",
+    "brunei": "BND", "cambodia": "KHR", "china": "CNY",
+    "hong kong": "HKD", "india": "INR", "indonesia": "IDR",
+    "japan": "JPY", "kazakhstan": "KZT", "kyrgyzstan": "KGS",
+    "laos": "LAK", "macau": "MOP", "malaysia": "MYR",
+    "maldives": "MVR", "mongolia": "MNT", "myanmar": "MMK",
+    "nepal": "NPR", "north korea": "KPW", "pakistan": "PKR",
+    "philippines": "PHP", "singapore": "SGD", "south korea": "KRW",
+    "sri lanka": "LKR", "taiwan": "TWD", "tajikistan": "TJS",
+    "thailand": "THB", "timor-leste": "USD", "turkmenistan": "TMT",
+    "uzbekistan": "UZS", "vietnam": "VND",
+
+    # Europe
+    "albania": "ALL", "andorra": "EUR", "austria": "EUR",
+    "belarus": "BYN", "belgium": "EUR", "bosnia": "BAM",
+    "bulgaria": "BGN", "croatia": "EUR", "cyprus": "EUR",
+    "czech republic": "CZK", "czechia": "CZK", "denmark": "DKK",
+    "estonia": "EUR", "finland": "EUR", "france": "EUR",
+    "germany": "EUR", "greece": "EUR", "hungary": "HUF",
+    "iceland": "ISK", "ireland": "EUR", "italy": "EUR",
+    "kosovo": "EUR", "latvia": "EUR", "liechtenstein": "CHF",
+    "lithuania": "EUR", "luxembourg": "EUR", "malta": "EUR",
+    "moldova": "MDL", "monaco": "EUR", "montenegro": "EUR",
+    "netherlands": "EUR", "north macedonia": "MKD", "norway": "NOK",
+    "poland": "PLN", "portugal": "EUR", "romania": "RON",
+    "russia": "RUB", "san marino": "EUR", "serbia": "RSD",
+    "slovakia": "EUR", "slovenia": "EUR", "spain": "EUR",
+    "sweden": "SEK", "switzerland": "CHF", "turkey": "TRY",
+    "ukraine": "UAH", "united kingdom": "GBP", "uk": "GBP",
+    "england": "GBP", "scotland": "GBP", "wales": "GBP",
+    "vatican": "EUR",
+
+    # Middle East
+    "bahrain": "BHD", "iran": "IRR", "iraq": "IQD",
+    "israel": "ILS", "jordan": "JOD", "kuwait": "KWD",
+    "lebanon": "LBP", "oman": "OMR", "palestine": "ILS",
+    "qatar": "QAR", "saudi arabia": "SAR", "syria": "SYP",
+    "united arab emirates": "AED", "uae": "AED", "yemen": "YER",
+
+    # Oceania
+    "australia": "AUD", "fiji": "FJD", "new zealand": "NZD",
+    "papua new guinea": "PGK", "samoa": "WST", "tonga": "TOP",
+}
+
+
+def resolve_currency(value: str) -> tuple[str, str | None]:
+    """
+    Resolve a user input to an ISO 4217 currency code.
+    Accepts:
+      - A country name: "France" → "EUR", "Nigeria" → "NGN"  (checked first)
+      - A 3-letter ISO 4217 code: "USD", "eur", "rwf" → returned uppercased
+    Returns (code, note) where note is a human-readable clarification or None.
+    Raises ValueError if the input cannot be resolved.
+    """
+    value = value.strip()
+
+    # 1. Try country name lookup first (handles abbreviations like "uae", "usa")
+    country = value.lower()
+    code = COUNTRY_TO_CURRENCY.get(country)
+    if code:
+        note = f"'{value}' is a country → using {code}" if len(value) > 4 or value.upper() != code else None
+        return code, note
+
+    # 2. Treat as currency code (2–4 uppercase letters)
+    if len(value) <= 4 and value.replace("-", "").isalpha():
+        return value.upper(), None
+
+    raise ValueError(
+        f"'{value}' is not a recognised currency code or country name. "
+        "Please enter a 3-letter ISO 4217 code (e.g. USD, EUR, NGN) "
+        "or a country name (e.g. France, Nigeria)."
+    )
+
+
 class CurrencyService:
 
     # Approximate rates relative to 1 USD — used when EXCHANGERATE_API_KEY is not set.
@@ -46,9 +155,22 @@ class CurrencyService:
         if not from_currency:
             return {"error": "Source currency required", "status": "error"}
 
-        from_currency = from_currency.upper()
-        to_currency   = to_currency.upper()
-        warnings      = []
+        warnings = []
+
+        # Resolve country names → currency codes
+        try:
+            from_currency, from_note = resolve_currency(from_currency)
+            if from_note:
+                warnings.append(from_note)
+        except ValueError as e:
+            return {"error": str(e), "status": "error"}
+
+        try:
+            to_currency, to_note = resolve_currency(to_currency)
+            if to_note:
+                warnings.append(to_note)
+        except ValueError as e:
+            return {"error": str(e), "status": "error"}
 
         # Primary: ExchangeRate-API
         try:
@@ -83,10 +205,7 @@ class CurrencyService:
         return result
 
     def _fallback_rate(self, from_currency: str, to_currency: str):
-        """Returns (rate, source) or (None, error_message).
-        Falls back to offline table for known currencies; for unknown ones
-        instructs the user to set EXCHANGERATE_API_KEY.
-        """
+        """Returns (rate, source) or (None, error_message)."""
         if from_currency not in self.FALLBACK_RATES or to_currency not in self.FALLBACK_RATES:
             return None, (
                 f"Currency pair {from_currency}/{to_currency} requires a live API. "

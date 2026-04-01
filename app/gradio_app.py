@@ -117,8 +117,8 @@ def run_agent(from_city, city, num_days, budget, from_currency, to_currency):
     if from_city and from_city.strip():
         data["from_city"] = from_city.strip()
     if budget:
-        fc = from_currency.strip().upper() if from_currency else "USD"
-        tc = to_currency.strip().upper() if to_currency else "USD"
+        fc = from_currency.strip() if from_currency else "USD"
+        tc = to_currency.strip() if to_currency else "USD"
         if not fc:
             return "⚠️  Please enter a budget currency (e.g. USD, EUR, XOF).", "", "", ""
         data["budget"] = budget

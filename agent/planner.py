@@ -7,7 +7,32 @@ try:
 except ImportError:
     _ANTHROPIC_AVAILABLE = False
 
-SYSTEM_PROMPT = """You are a travel planning assistant. Your job is to extract structured travel intent from the user's message.
+#SYSTEM_PROMPT = """You are a travel planning assistant. Your job is to extract structured travel intent from the user's message.
+
+#Return ONLY a valid JSON object with these fields:
+#{
+ # "city": "<city name or null>",
+ # "budget": <numeric amount or null>,
+ # "from_currency": "<source currency code or null>",
+ # "to_currency": "<target currency code or null>",
+ # "num_days": <integer or null>,
+ # "date": "<date string or null>"
+#}
+
+#Rules:
+#- Extract city names exactly as written (capitalise first letter)
+#- Budget must be a number, strip currency symbols
+#- Currency codes must be standard 3-letter ISO 4217 codes — accept ANY valid world currency
+#  (e.g. USD, EUR, GBP, JPY, NGN, XOF, XAF, RWF, UGX, KES, BRL, INR, AED, ZAR, MAD, GHS …)
+#- Infer the currency from context when possible (e.g. "francs" → XOF or XAF, "naira" → NGN,
+ # "rupees" → INR, "pounds" → GBP, "shillings" → KES or UGX depending on city)
+#- If the user says "show costs in X" or "convert to X", set to_currency to X
+#- If no currency is mentioned for from_currency, leave it null
+#- num_days: 1 for "day trip" or "one-day", etc.
+#- Return null for any field you cannot determine
+#"""
+SYSTEM_PROMPT =""" 
+You are a travel planning assistant. Your job is to extract structured travel intent from the user's message.
 
 Return ONLY a valid JSON object with these fields:
 {
@@ -20,18 +45,19 @@ Return ONLY a valid JSON object with these fields:
 }
 
 Rules:
-- Extract city names exactly as written (capitalise first letter)
-- Budget must be a number, strip currency symbols
-- Currency codes must be standard 3-letter ISO 4217 codes — accept ANY valid world currency
-  (e.g. USD, EUR, GBP, JPY, NGN, XOF, XAF, RWF, UGX, KES, BRL, INR, AED, ZAR, MAD, GHS …)
-- Infer the currency from context when possible (e.g. "francs" → XOF or XAF, "naira" → NGN,
-  "rupees" → INR, "pounds" → GBP, "shillings" → KES or UGX depending on city)
+- Extract city names and normalize to proper title case (e.g. "new york" → "New York")
+- Budget must be a number (remove currency symbols and commas)
+- For from_currency and to_currency accept EITHER:
+    a) A 3-letter ISO 4217 code: USD, EUR, NGN, XOF …
+    b) A country name as written by the user: "France", "Nigeria", "Japan" — pass it through as-is
+- You may infer currency ONLY when context is unambiguous (e.g. "yen" → JPY, "naira" → NGN)
+- If currency is ambiguous (e.g. "francs", "shillings") and no location clarifies it, return null
 - If the user says "show costs in X" or "convert to X", set to_currency to X
-- If no currency is mentioned for from_currency, leave it null
+- If no currency is mentioned for from_currency, return null
 - num_days: 1 for "day trip" or "one-day", etc.
 - Return null for any field you cannot determine
+- Do NOT guess missing or ambiguous values
 """
-
 
 def _extract_intent_with_llm(user_message: str) -> dict:
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
